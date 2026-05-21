@@ -47,16 +47,45 @@ Server runs on `http://localhost:3456`.
 
 The issue appears in the dashboard at `http://localhost:3456`.
 
-### 4. Fix issues with Claude Code
+### 4. Add the workflow to your project's CLAUDE.md
+
+Copy this snippet into the `CLAUDE.md` file in **your project** (not this repo). Inlining the rules ensures Claude follows them without needing to be told to read a separate file first.
+
+```markdown
+## Bug tracker
+
+Open bugs are tracked in Pinpoint at http://localhost:3456.
+
+- This will fail: Bash(curl -s http://localhost:3456/api/bugs?status=open)
+- Run this instead: Bash(curl -s "http://localhost:3456/api/bugs?status=open")
+
+### Workflow — follow exactly
+
+1. Fetch open bugs (one request)
+2. For each bug, grep the codebase for class names / attributes in `selector` and `element_html` to find the likely source file
+3. Group bugs by file: **same file → fix sequentially; different files → fix in parallel** using sub-agents
+4. Fix with the minimal correct change
+5. After fixing, PATCH each bug to `"status": "review"` — **never `"resolved"` or `"closed"`**
+
+The human reviews changes in the Pinpoint dashboard and either approves (→ closed) or reopens (→ open).
+
+### API
+
+​```
+GET  http://localhost:3456/api/bugs?status=open
+PATCH http://localhost:3456/api/bugs/<id>   body: { "status": "review" }
+​```
+```
+
+### 5. Fix issues with Claude Code
 
 Open a Claude Code session in your project directory and say:
 
 ```
-Look at the open pinpoint issues and fix them using sub-agents.
-Read fix-issues.md for the workflow.
+fix open bugs
 ```
 
-Claude will fetch each open issue, read the screenshots, locate the code, and fix bugs in parallel.
+Claude will fetch each open issue, locate the code, and fix bugs in parallel — then mark them ready for your review in the dashboard.
 
 ## What each issue contains
 
