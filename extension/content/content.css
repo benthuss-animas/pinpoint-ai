@@ -1,0 +1,96 @@
+/* ── Element picker ──────────────────────────────────────────────────────── */
+#pp-pick-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483640;
+  cursor: crosshair;
+  background: transparent;
+}
+
+.pp-hovered {
+  outline: 2px solid #6366f1 !important;
+  outline-offset: 1px !important;
+  background-color: rgba(99, 102, 241, 0.07) !important;
+}
+
+.pp-selected {
+  outline: 2px solid #a5b4fc !important;
+  outline-offset: 1px !important;
+}
+
+.pp-highlighted {
+  outline: 2px solid #6366f1 !important;
+  outline-offset: 2px !important;
+  background-color: rgba(99, 102, 241, 0.12) !important;
+}
+
+/* ── Pin dots ────────────────────────────────────────────────────────────── */
+#pp-pin-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483641;
+}
+
+.pp-pin {
+  position: absolute; /* inside the fixed layer — repositioned via JS */
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  transform: translate(-50%, -50%);
+}
+
+.pp-pin-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 2px #fff;
+  transition: transform 0.1s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.pp-pin-dot:hover {
+  transform: scale(1.25);
+}
+
+/* Priority colours */
+.pp-pin-low    .pp-pin-dot { background: #22c55e; }
+.pp-pin-medium .pp-pin-dot { background: #eab308; }
+.pp-pin-high   .pp-pin-dot { background: #f97316; }
+.pp-pin-critical .pp-pin-dot { background: #ef4444; box-shadow: 0 1px 4px rgba(0,0,0,0.4), 0 0 0 2px #fff, 0 0 0 4px rgba(239,68,68,0.4); }
+
+.pp-pin-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: #0f0f13;
+  color: #e2e2f0;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 5px 9px;
+  border-radius: 5px;
+  border: 1px solid #2a2a3a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 1;
+}
+.pp-pin:hover .pp-pin-tooltip {
+  opacity: 1;
+}

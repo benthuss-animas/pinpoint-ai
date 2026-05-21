@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pinpoint</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0c0c12; --surface: #13131c; --border: #1f1f2e; --border-hi: #2e2e42;
+      --text: #e2e2f0; --muted: #6b7280; --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+      --green: #22c55e; --yellow: #eab308; --orange: #f97316; --red: #ef4444;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .logo { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; color: #a5b4fc; }
+    .header-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 4px; font-size: 16px; line-height: 1; }
+    .header-btn:hover { background: var(--border-hi); color: var(--text); }
+
+    #view-main, #view-picking, #view-form, #view-settings { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .active-view { display: flex !important; }
+
+    /* ── Project selector ── */
+    .project-bar { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 7px; flex-shrink: 0; background: var(--surface); }
+    .project-bar label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); white-space: nowrap; }
+    .project-select { flex: 1; background: #1c1c28; border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: inherit; font-size: 12px; padding: 4px 7px; outline: none; cursor: pointer; }
+    .project-select:focus { border-color: var(--accent); }
+    .project-select option { background: #1c1c28; }
+    .new-proj-btn { background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font-size: 16px; line-height: 1; padding: 3px 7px; cursor: pointer; flex-shrink: 0; }
+    .new-proj-btn:hover { border-color: var(--accent); color: #a5b4fc; }
+
+    /* ── New project inline form ── */
+    .new-proj-form { padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface); display: none; flex-direction: column; gap: 6px; flex-shrink: 0; }
+    .new-proj-form.open { display: flex; }
+    .new-proj-form input { background: #1c1c28; border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: inherit; font-size: 12px; padding: 6px 8px; outline: none; width: 100%; }
+    .new-proj-form input:focus { border-color: var(--accent); }
+    .new-proj-form .row { display: flex; gap: 6px; }
+    .new-proj-save { background: var(--accent); color: #fff; border: none; border-radius: 5px; padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; flex-shrink: 0; }
+    .new-proj-save:hover { background: #5254cc; }
+    .new-proj-cancel { background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); padding: 6px 10px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+    .new-proj-err { font-size: 11px; color: var(--red); }
+
+    .page-url { padding: 7px 14px; font-size: 11px; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+    .pick-btn { margin: 14px; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: background 0.15s; flex-shrink: 0; }
+    .pick-btn:hover { background: #5254cc; }
+    .issues-scroll { flex: 1; overflow-y: auto; padding: 0 14px 14px; }
+    .issues-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 12px 0 7px; }
+    .issue-card { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px; margin-bottom: 5px; cursor: pointer; transition: border-color 0.12s; }
+    .issue-card:hover { border-color: var(--border-hi); }
+    .issue-card.review-card { border-left: 3px solid rgba(168,85,247,0.4); }
+    .review-reopen { margin-left: auto; background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 10px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; }
+    .review-reopen:hover { border-color: #a855f7; color: #a855f7; }
+    .kickback-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .kickback-note { width: 100%; background: #1c1c28; border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: inherit; font-size: 11px; padding: 6px 8px; outline: none; resize: vertical; transition: border-color 0.15s; }
+    .kickback-note:focus { border-color: var(--orange); }
+    .kickback-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .kb-skip { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 11px; padding: 4px 10px; cursor: pointer; }
+    .kb-skip:hover { background: var(--border-hi); color: var(--text); }
+    .kb-save { background: var(--orange); color: #fff; border: none; border-radius: 4px; font-size: 11px; padding: 4px 10px; cursor: pointer; font-weight: 500; }
+    .kb-save:hover { background: #ea6c0a; }
+    .issue-card-top { display: flex; align-items: flex-start; gap: 7px; }
+    .priority-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .pd-low { background: var(--green); } .pd-medium { background: var(--yellow); }
+    .pd-high { background: var(--orange); } .pd-critical { background: var(--red); }
+    .issue-title { font-weight: 500; font-size: 12px; flex: 1; line-height: 1.4; }
+    .issue-num { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+    .issue-sel { font-family: 'SF Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .empty { text-align: center; padding: 28px 14px; color: var(--muted); font-size: 12px; }
+    .server-err { margin: 10px 14px; padding: 8px 11px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; font-size: 11px; color: #fca5a5; }
+
+    #view-picking { align-items: center; justify-content: center; text-align: center; gap: 14px; padding: 24px; }
+    .pick-anim { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--accent); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .pick-heading { font-size: 15px; font-weight: 600; }
+    .pick-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .cancel-btn { padding: 7px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; cursor: pointer; }
+    .cancel-btn:hover { background: var(--border-hi); }
+
+    #view-form { overflow-y: auto; }
+    #view-form::-webkit-scrollbar { width: 4px; }
+    #view-form::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+    .form-inner { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
+    .form-el-info { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+    .el-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 3px; }
+    .el-selector { font-family: 'SF Mono', monospace; font-size: 11px; color: #6ee7b7; word-break: break-all; }
+    .field label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+    .field input, .field textarea, .field select { width: 100%; background: #1c1c28; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 13px; padding: 7px 9px; outline: none; transition: border-color 0.15s; resize: vertical; }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+    .field textarea { min-height: 65px; }
+    .field select option { background: #1c1c28; }
+    .row { display: flex; gap: 8px; }
+    .row .field { flex: 1; }
+    .form-footer { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; background: var(--bg); position: sticky; bottom: 0; }
+    .submit-btn { flex: 1; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 9px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+    .submit-btn:hover { background: #5254cc; }
+    .submit-btn:disabled { background: #374151; cursor: not-allowed; }
+    .back-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--muted); font-size: 13px; cursor: pointer; }
+    .back-btn:hover { background: var(--border-hi); color: var(--text); }
+
+    #view-settings { overflow-y: auto; }
+    .settings-inner { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
+    .settings-inner h3 { font-weight: 600; font-size: 14px; }
+    .settings-note { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 6px; padding: 9px 11px; font-size: 11px; color: #a5b4fc; line-height: 1.6; }
+    .save-btn { padding: 8px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .save-btn:hover { background: #5254cc; }
+    .status-msg { font-size: 11px; color: var(--green); }
+    .status-msg.error { color: var(--red); }
+
+    #toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 7px 14px; font-size: 12px; color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: opacity 0.2s; white-space: nowrap; z-index: 999; }
+    #toast.show { opacity: 1; }
+    #toast.success { border-color: var(--green); color: var(--green); }
+    #toast.error { border-color: var(--red); color: var(--red); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5">
+      <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/>
+      <circle cx="12" cy="9" r="2.5" fill="#6366f1" stroke="none"/>
+    </svg>
+    Pinpoint
+  </div>
+  <div style="display:flex;gap:4px">
+    <button class="header-btn" id="btn-dashboard" title="Open Dashboard">⊞</button>
+    <button class="header-btn" id="btn-refresh" title="Refresh">↻</button>
+    <button class="header-btn" id="btn-settings" title="Settings">⚙</button>
+  </div>
+</header>
+
+<!-- ── Main view ── -->
+<div id="view-main">
+  <!-- Project selector -->
+  <div class="project-bar">
+    <label>Project</label>
+    <select class="project-select" id="project-select"></select>
+    <button class="new-proj-btn" id="btn-new-proj" title="New project">+</button>
+  </div>
+
+  <!-- New project inline form -->
+  <div class="new-proj-form" id="new-proj-form">
+    <input type="text" id="np-name" placeholder="Project name">
+    <input type="text" id="np-url" placeholder="URL pattern (e.g. http://localhost:3000)">
+    <div class="new-proj-err" id="np-err"></div>
+    <div class="row">
+      <button class="new-proj-cancel" id="np-cancel">Cancel</button>
+      <button class="new-proj-save" id="np-save">Create</button>
+    </div>
+  </div>
+
+  <div class="page-url" id="page-url">—</div>
+  <button class="pick-btn" id="btn-pick">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/>
+      <circle cx="12" cy="9" r="2" fill="currentColor" stroke="none"/>
+    </svg>
+    Pin a Bug or Task
+  </button>
+  <div class="issues-scroll">
+    <div id="server-err" class="server-err" style="display:none">Server offline — run <code>npm start</code> in the <code>server/</code> folder.</div>
+    <div class="issues-label">On this page</div>
+    <div id="issues-list"><div class="empty">No open issues on this page</div></div>
+  </div>
+</div>
+
+<!-- ── Picking view ── -->
+<div id="view-picking">
+  <div class="pick-anim"></div>
+  <div class="pick-heading">Click any element</div>
+  <div class="pick-sub">Hover to highlight, click to pin.<br>Press Esc to cancel.</div>
+  <button class="cancel-btn" id="btn-cancel-pick">Cancel</button>
+</div>
+
+<!-- ── Form view ── -->
+<div id="view-form">
+  <div class="form-inner">
+    <div class="form-el-info">
+      <div class="el-label">Pinned element</div>
+      <div class="el-selector" id="form-selector"></div>
+    </div>
+    <div class="field">
+      <label>Title *</label>
+      <input type="text" id="f-title" placeholder="Short description of the issue…">
+    </div>
+    <div class="field">
+      <label>What I expected</label>
+      <textarea id="f-expected" placeholder="What should have happened…"></textarea>
+    </div>
+    <div class="field">
+      <label>What I saw</label>
+      <textarea id="f-actual" placeholder="What actually happened…"></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Type</label>
+        <select id="f-type">
+          <option value="bug">🐛 Bug</option>
+          <option value="task">📋 Task</option>
+          <option value="enhancement">✨ Enhancement</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="f-priority">
+          <option value="medium">🟡 Medium</option>
+          <option value="low">🟢 Low</option>
+          <option value="high">🟠 High</option>
+          <option value="critical">🔴 Critical</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="form-footer">
+    <button class="back-btn" id="btn-back">← Back</button>
+    <button class="submit-btn" id="btn-submit">Submit Issue →</button>
+  </div>
+</div>
+
+<!-- ── Settings view ── -->
+<div id="view-settings">
+  <div class="settings-inner">
+    <h3>Settings</h3>
+    <div class="settings-note">Configure the server URL if you changed the default port.</div>
+    <div class="field">
+      <label>Server URL</label>
+      <input type="text" id="s-server" value="http://localhost:3456">
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="save-btn" id="btn-save-settings">Save</button>
+      <span id="settings-status" class="status-msg"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="panel.js"></script>
+</body>
+</html>

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pinpoint</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0c0c12; --surface: #13131c; --surface2: #1a1a25;
+      --border: #1f1f2e; --border-hi: #2e2e42;
+      --text: #e2e2f0; --muted: #6b7280; --muted2: #4b5563;
+      --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+      --purple: #a855f7; --purple-dim: rgba(168,85,247,0.15);
+      --green: #22c55e; --yellow: #eab308; --orange: #f97316; --red: #ef4444;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Header ── */
+    header { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; height: 52px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: #a5b4fc; }
+    .hdr-actions { display: flex; gap: 8px; }
+    .btn { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #5254cc; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:hover { background: var(--border-hi); color: var(--text); }
+
+    /* ── Layout ── */
+    .body { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+    .sidebar-top { padding: 14px 14px 10px; flex-shrink: 0; }
+    .sidebar-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted2); margin-bottom: 8px; }
+    .project-list { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+    .project-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 8px; border-radius: 6px; cursor: pointer; transition: background 0.12s; gap: 6px; }
+    .project-item:hover { background: var(--surface2); }
+    .project-item.active { background: var(--accent-dim); }
+    .project-item.active .project-name { color: #a5b4fc; }
+    .project-name { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .project-badge { background: var(--border-hi); color: var(--muted); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 9px; flex-shrink: 0; min-width: 20px; text-align: center; }
+    .project-item.active .project-badge { background: var(--accent-dim); color: #a5b4fc; }
+    .sidebar-bottom { padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .new-project-btn { width: 100%; padding: 7px; background: transparent; border: 1px dashed var(--border-hi); border-radius: 6px; color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .new-project-btn:hover { border-color: var(--accent); color: #a5b4fc; background: var(--accent-dim); }
+
+    /* ── Main ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 12px; }
+    .main-title { font-weight: 600; font-size: 15px; }
+    .main-meta { font-size: 12px; color: var(--muted); }
+    .tabs { display: flex; gap: 2px; }
+    .tab { padding: 5px 12px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; border-radius: 5px; background: none; border: none; transition: all 0.12s; }
+    .tab:hover { color: var(--text); background: var(--surface2); }
+    .tab.active { background: var(--accent-dim); color: #a5b4fc; }
+
+    .bug-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+    .bug-list::-webkit-scrollbar { width: 4px; }
+    .bug-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+    /* ── Bug card ── */
+    .bug-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; transition: border-color 0.12s; }
+    .bug-card:hover { border-color: var(--border-hi); }
+    .priority-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+    .pd-low { background: var(--green); } .pd-medium { background: var(--yellow); }
+    .pd-high { background: var(--orange); } .pd-critical { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .bug-body { flex: 1; min-width: 0; }
+    .bug-top { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; flex-wrap: wrap; }
+    .bug-title { font-weight: 500; font-size: 13px; }
+    .badge { padding: 1px 7px; border-radius: 9px; font-size: 10px; font-weight: 500; flex-shrink: 0; }
+    .badge-type { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .badge-project { background: var(--accent-dim); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.25); }
+    .bug-url { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-family: 'SF Mono', monospace; }
+    .bug-meta { font-size: 11px; color: var(--muted2); margin-top: 4px; }
+    .bug-actions { display: flex; gap: 5px; flex-shrink: 0; align-items: flex-start; }
+    .action-btn { padding: 3px 9px; border-radius: 4px; font-size: 11px; cursor: pointer; background: transparent; border: 1px solid var(--border); color: var(--muted); transition: all 0.12s; }
+    .action-btn:hover { background: var(--border-hi); color: var(--text); }
+    .action-btn.danger:hover  { border-color: var(--red);    color: var(--red); }
+    .action-btn.reopen:hover  { border-color: var(--green);  color: var(--green); }
+    .action-btn.approve:hover { border-color: var(--purple); color: var(--purple); }
+    .bug-card.review-card { border-left: 3px solid var(--purple-dim); }
+    .badge-review { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+
+    /* ── History timeline ── */
+    .history-list { display: flex; flex-direction: column; }
+    .history-entry { display: flex; gap: 10px; padding: 8px 0 8px 14px; border-left: 2px solid var(--border); margin-left: 3px; position: relative; }
+    .history-entry::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--border-hi); border: 2px solid var(--surface); position: absolute; left: -5px; top: 13px; }
+    .history-entry.kickback::before { background: var(--orange); }
+    .history-entry.filed::before { background: var(--accent); }
+    .history-entry.closed::before { background: var(--muted2); }
+    .history-entry.review::before { background: var(--purple); }
+    .history-entry:last-child { border-left-color: transparent; }
+    .history-meta { font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .history-transition { font-weight: 500; color: var(--text); }
+    .history-note { font-size: 12px; color: var(--text); margin-top: 5px; background: var(--surface2); border-left: 2px solid var(--orange); padding: 6px 8px; border-radius: 0 4px 4px 0; line-height: 1.5; }
+
+    /* ── Empty / loading ── */
+    .state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 10px; color: var(--muted); padding: 40px; text-align: center; }
+    .state .icon { font-size: 32px; opacity: 0.5; }
+    .state .msg { font-size: 13px; }
+    .state .sub { font-size: 12px; color: var(--muted2); }
+
+    /* ── Modal ── */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+    .modal-backdrop.open { opacity: 1; pointer-events: all; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 22px; width: 360px; transform: translateY(8px); transition: transform 0.15s; }
+    .modal-backdrop.open .modal { transform: translateY(0); }
+    .modal h3 { font-weight: 600; font-size: 15px; margin-bottom: 16px; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .field input, .field textarea, .field select { width: 100%; background: #1c1c28; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none; transition: border-color 0.15s; }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+    .field textarea { resize: vertical; min-height: 72px; }
+    .field select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+    .field .hint { font-size: 11px; color: var(--muted2); margin-top: 4px; }
+    .field-row { display: flex; gap: 10px; }
+    .field-row .field { flex: 1; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .modal-err { font-size: 12px; color: var(--red); margin-top: 8px; min-height: 16px; }
+
+    /* ── Bug detail panel ── */
+    .detail-backdrop { position: fixed; inset: 0; z-index: 99; display: flex; justify-content: flex-end; pointer-events: none; }
+    .detail-backdrop.open { pointer-events: all; }
+    .detail-panel { width: 480px; background: var(--surface); border-left: 1px solid var(--border); height: 100%; overflow-y: auto; transform: translateX(100%); transition: transform 0.2s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; box-shadow: -8px 0 32px rgba(0,0,0,0.4); }
+    .detail-backdrop.open .detail-panel { transform: translateX(0); }
+    .detail-header { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+    .detail-header h3 { flex: 1; font-weight: 600; font-size: 14px; }
+    .detail-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+    .detail-close:hover { background: var(--border-hi); color: var(--text); }
+    .detail-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+    .detail-section { display: flex; flex-direction: column; gap: 4px; }
+    .detail-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted2); }
+    .detail-value { font-size: 12px; color: var(--text); line-height: 1.6; }
+    .detail-value code { font-family: 'SF Mono', monospace; background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: 11px; word-break: break-all; }
+    .detail-value pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: 'SF Mono', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; overflow-x: auto; }
+    .detail-footer { padding: 14px 18px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 8px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.2">
+      <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/>
+      <circle cx="12" cy="9" r="2.5" fill="#6366f1" stroke="none"/>
+    </svg>
+    Pinpoint
+  </div>
+  <div class="hdr-actions">
+    <button class="btn btn-ghost" onclick="refresh()">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="body">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-title">Projects</div>
+    </div>
+    <div class="project-list" id="project-list"></div>
+    <div class="sidebar-bottom">
+      <button class="new-project-btn" onclick="openNewProject()">+ New project</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <div class="main-title" id="main-title">All projects</div>
+        <div class="main-meta" id="main-meta"></div>
+      </div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchStatus('open', this)">Open</button>
+        <button class="tab" id="tab-review" onclick="switchStatus('review', this)">Ready for Review</button>
+        <button class="tab" onclick="switchStatus('closed', this)">Closed</button>
+      </div>
+    </div>
+    <div class="bug-list" id="bug-list">
+      <div class="state"><div class="icon">🔄</div><div class="msg">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- New project modal -->
+<div class="modal-backdrop" id="modal-new-project" onclick="closeModal(event)">
+  <div class="modal">
+    <h3>New Project</h3>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="np-name" placeholder="My Web App" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>URL Pattern <span style="color:var(--muted2);font-weight:400;text-transform:none">(optional)</span></label>
+      <input type="text" id="np-url" placeholder="http://localhost:3000">
+      <div class="hint">Used to auto-select this project in the extension.</div>
+    </div>
+    <div class="modal-err" id="np-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('modal-new-project').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="createProject()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kickback modal (reopen from review) -->
+<div class="modal-backdrop" id="modal-kickback" onclick="closeModal(event)">
+  <div class="modal" style="width:400px">
+    <h3>Kick back to Open</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6">Optionally leave notes for the next fix attempt — what failed, what to try differently, additional context.</p>
+    <div class="field">
+      <label>Post-review notes <span style="color:var(--muted2);font-weight:400;text-transform:none">(optional)</span></label>
+      <textarea id="kb-note" rows="4" placeholder="e.g. Still broken on Safari — the overflow persists when viewport < 768px…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="submitKickback(false)">Skip &amp; Reopen</button>
+      <button class="btn btn-primary" onclick="submitKickback(true)">Save &amp; Reopen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit bug modal -->
+<div class="modal-backdrop" id="modal-edit-bug" onclick="closeModal(event)">
+  <div class="modal" style="width:420px">
+    <h3>Edit Issue</h3>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="eb-title" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <textarea id="eb-description"></textarea>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Priority</label>
+        <select id="eb-priority">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="eb-type">
+          <option value="bug">🐛 Bug</option>
+          <option value="task">📋 Task</option>
+          <option value="enhancement">✨ Enhancement</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Project</label>
+      <select id="eb-project"></select>
+    </div>
+    <div class="modal-err" id="eb-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('modal-edit-bug').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bug detail panel -->
+<div class="detail-backdrop" id="detail-backdrop" onclick="closeDetail(event)">
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <h3 id="detail-title"></h3>
+      <button class="detail-close" onclick="closeDetailPanel()">✕</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="detail-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<script>
+  const API = '';
+  let selectedProjectId = null; // null = all
+  let currentStatus = 'open';
+  let projects = [];
+  let bugs = [];
+
+  // ── Projects ──────────────────────────────────────────────────────────────
+  async function loadProjects() {
+    projects = await fetch(`${API}/api/projects`).then(r => r.json()).catch(() => []);
+    renderSidebar();
+  }
+
+  function countForStatus(p, status) {
+    if (status === 'open')   return p.open_count;
+    if (status === 'review') return p.review_count;
+    return p.total_count - p.open_count - p.review_count;
+  }
+
+  function renderSidebar() {
+    const list = document.getElementById('project-list');
+    const allCount = projects.reduce((s, p) => s + countForStatus(p, currentStatus), 0);
+
+    list.innerHTML = '';
+    list.appendChild(makeProjectItem(null, 'All projects', allCount));
+
+    const div = document.createElement('div');
+    div.style.cssText = 'height:1px;background:var(--border);margin:6px 0';
+    list.appendChild(div);
+
+    projects.forEach(p => list.appendChild(makeProjectItem(p.id, p.name, countForStatus(p, currentStatus))));
+  }
+
+  function makeProjectItem(id, name, count) {
+    const el = document.createElement('div');
+    el.className = 'project-item' + (selectedProjectId === id ? ' active' : '');
+    el.innerHTML = `<span class="project-name">${escHtml(name)}</span><span class="project-badge">${count}</span>`;
+    el.addEventListener('click', () => selectProject(id, name));
+    return el;
+  }
+
+  function selectProject(id, name) {
+    selectedProjectId = id;
+    document.getElementById('main-title').textContent = id ? name : 'All projects';
+    renderSidebar();
+    loadBugs();
+  }
+
+  // ── Bugs ──────────────────────────────────────────────────────────────────
+  async function loadBugs() {
+    const list = document.getElementById('bug-list');
+    list.innerHTML = '<div class="state"><div class="icon">🔄</div><div class="msg">Loading…</div></div>';
+
+    const params = new URLSearchParams({ status: currentStatus });
+    if (selectedProjectId) params.set('projectId', selectedProjectId);
+
+    bugs = await fetch(`${API}/api/bugs?${params}`).then(r => r.json()).catch(() => []);
+    renderBugs();
+  }
+
+  const STATUS_LABEL = { open: 'open', review: 'in review', closed: 'closed' };
+  const STATUS_EMPTY = {
+    open:   { icon: '🎉', msg: 'No open issues',           sub: 'Use the Pinpoint extension to pin bugs to page elements.' },
+    review: { icon: '✅', msg: 'Nothing awaiting review',   sub: 'Claude will mark bugs as "Ready for Review" after fixing them.' },
+    closed: { icon: '📦', msg: 'No closed issues',          sub: '' },
+  };
+
+  function renderBugs() {
+    const list = document.getElementById('bug-list');
+    const meta = document.getElementById('main-meta');
+    const label = STATUS_LABEL[currentStatus] || currentStatus;
+    meta.textContent = `${bugs.length} ${label} issue${bugs.length !== 1 ? 's' : ''}`;
+
+    if (!bugs.length) {
+      const e = STATUS_EMPTY[currentStatus] || STATUS_EMPTY.closed;
+      list.innerHTML = `<div class="state"><div class="icon">${e.icon}</div><div class="msg">${e.msg}</div><div class="sub">${e.sub}</div></div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    bugs.forEach(bug => list.appendChild(makeBugCard(bug)));
+  }
+
+  const PRIORITY_CLASS = { low: 'pd-low', medium: 'pd-medium', high: 'pd-high', critical: 'pd-critical' };
+  const TYPE_EMOJI = { bug: '🐛', task: '📋', enhancement: '✨' };
+
+  function makeBugCard(bug) {
+    const card = document.createElement('div');
+    card.className = 'bug-card' + (bug.status === 'review' ? ' review-card' : '');
+    const showProject = selectedProjectId === null && bug.project_name;
+    let actions = '';
+    if (bug.status === 'open') {
+      actions = `<button class="action-btn danger" onclick="closeBug(event,${bug.id})">Close</button>`;
+    } else if (bug.status === 'review') {
+      actions = `<button class="action-btn approve" onclick="approveBug(event,${bug.id})">Approve ✓</button>
+                 <button class="action-btn reopen"  onclick="reopenBug(event,${bug.id})">Reopen</button>`;
+    } else {
+      actions = `<button class="action-btn reopen" onclick="reopenBug(event,${bug.id})">Reopen</button>`;
+    }
+    card.innerHTML = `
+      <div class="priority-dot ${PRIORITY_CLASS[bug.priority] || 'pd-medium'}"></div>
+      <div class="bug-body">
+        <div class="bug-top">
+          <span class="bug-title">${escHtml(bug.title)}</span>
+          <span class="badge badge-type">${TYPE_EMOJI[bug.type] || '🐛'} ${bug.type}</span>
+          ${bug.status === 'review' ? `<span class="badge badge-review">ready for review</span>` : ''}
+          ${showProject ? `<span class="badge badge-project">${escHtml(bug.project_name)}</span>` : ''}
+        </div>
+        ${bug.url ? `<div class="bug-url">${escHtml(bug.url)}</div>` : ''}
+        <div class="bug-meta">#${bug.id} · ${timeAgo(bug.created_at)}</div>
+      </div>
+      <div class="bug-actions">
+        ${actions}
+        <button class="action-btn" onclick="openEditModal(event,${bug.id})">Edit</button>
+        <button class="action-btn danger" onclick="deleteBug(event,${bug.id})">Delete</button>
+      </div>
+    `;
+    card.addEventListener('click', (e) => { if (!e.target.closest('.bug-actions')) openDetail(bug); });
+    return card;
+  }
+
+  async function approveBug(e, id) {
+    e.stopPropagation();
+    await fetch(`${API}/api/bugs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'closed' }) });
+    refresh();
+  }
+
+  async function closeBug(e, id) { e.stopPropagation(); await patchBug(id, 'closed'); refresh(); }
+
+  async function reopenBug(e, id) {
+    e.stopPropagation();
+    const bug = bugs.find(b => b.id === id);
+    if (bug?.status === 'review') { openKickbackModal(id); return; }
+    await patchBug(id, 'open');
+    refresh();
+  }
+
+  async function deleteBug(e, id) {
+    e.stopPropagation();
+    if (!confirm('Delete this bug permanently?')) return;
+    await fetch(`${API}/api/bugs/${id}`, { method: 'DELETE' });
+    refresh();
+  }
+
+  // ── Status tabs ────────────────────────────────────────────────────────────
+  function switchStatus(status, btn) {
+    currentStatus = status;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    renderSidebar();
+    loadBugs();
+  }
+
+  // ── New project modal ──────────────────────────────────────────────────────
+  function openNewProject() {
+    document.getElementById('np-name').value = '';
+    document.getElementById('np-url').value = '';
+    document.getElementById('np-err').textContent = '';
+    document.getElementById('modal-new-project').classList.add('open');
+    setTimeout(() => document.getElementById('np-name').focus(), 50);
+  }
+
+  async function createProject() {
+    const name = document.getElementById('np-name').value.trim();
+    const urlPattern = document.getElementById('np-url').value.trim();
+    const err = document.getElementById('np-err');
+    if (!name) { err.textContent = 'Name is required.'; return; }
+    const res = await fetch(`${API}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, urlPattern }),
+    });
+    const data = await res.json();
+    if (!data.success) { err.textContent = data.error; return; }
+    document.getElementById('modal-new-project').classList.remove('open');
+    await loadProjects();
+    selectProject(data.project.id, data.project.name);
+  }
+
+  function closeModal(e) {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+  }
+
+  document.getElementById('np-name').addEventListener('keydown', e => { if (e.key === 'Enter') createProject(); });
+
+  // ── Kickback modal ─────────────────────────────────────────────────────────
+  let kickbackBugId = null;
+  let kickbackFromDetail = false;
+
+  function openKickbackModal(id, fromDetail = false) {
+    kickbackBugId = id;
+    kickbackFromDetail = fromDetail;
+    document.getElementById('kb-note').value = '';
+    document.getElementById('modal-kickback').classList.add('open');
+    setTimeout(() => document.getElementById('kb-note').focus(), 50);
+  }
+
+  async function submitKickback(withNote) {
+    const note = withNote ? document.getElementById('kb-note').value.trim() : null;
+    document.getElementById('modal-kickback').classList.remove('open');
+    await patchBug(kickbackBugId, 'open', note || null);
+    if (kickbackFromDetail) closeDetailPanel();
+    refresh();
+  }
+
+  // ── Bug detail ─────────────────────────────────────────────────────────────
+  let detailBug = null;
+
+  async function openDetail(bug) {
+    detailBug = bug;
+    document.getElementById('detail-title').textContent = bug.title;
+    const body = document.getElementById('detail-body');
+    const errors = Array.isArray(bug.console_errors) ? bug.console_errors : [];
+
+    const history = await fetch(`${API}/api/bugs/${bug.id}/history`).then(r => r.json()).catch(() => []);
+
+    body.innerHTML = `
+      ${bug.project_name ? section('Project', `<span class="badge badge-project">${escHtml(bug.project_name)}</span>`) : ''}
+      ${section('Status / Priority / Type', `${bug.status} · ${bug.priority} · ${bug.type}`)}
+      ${bug.url ? section('URL', `<code>${escHtml(bug.url)}</code>`) : ''}
+      ${bug.selector ? section('CSS Selector', `<code>${escHtml(bug.selector)}</code>`) : ''}
+      ${bug.element_html ? section('Element HTML', `<pre>${escHtml(bug.element_html)}</pre>`) : ''}
+      ${bug.description ? section('Description', escHtml(bug.description).replace(/\n/g, '<br>')) : ''}
+      ${errors.length ? section('Console Errors', `<pre>${errors.map(escHtml).join('\n')}</pre>`) : ''}
+      ${section('Metadata', `ID #${bug.id} · ${bug.viewport_w ? `${bug.viewport_w}×${bug.viewport_h}` : 'unknown viewport'} · filed ${timeAgo(bug.created_at)}`)}
+      ${history.length ? section('History', renderHistory(history)) : ''}
+    `;
+
+    const footer = document.getElementById('detail-footer');
+    const editBtn = `<button class="btn btn-ghost" onclick="openEditModalById(${bug.id})">Edit</button>`;
+    if (bug.status === 'open') {
+      footer.innerHTML = `${editBtn}<button class="btn btn-ghost" style="color:var(--red);border-color:var(--red)" onclick="closeBugFromDetail(${bug.id})">Close issue</button>`;
+    } else if (bug.status === 'review') {
+      footer.innerHTML = `${editBtn}
+        <button class="btn btn-ghost" style="color:var(--purple);border-color:var(--purple)" onclick="approveBugFromDetail(${bug.id})">Approve ✓</button>
+        <button class="btn btn-ghost" style="color:var(--green);border-color:var(--green)"  onclick="reopenBugFromDetail(${bug.id})">Reopen</button>`;
+    } else {
+      footer.innerHTML = `${editBtn}<button class="btn btn-ghost" style="color:var(--green);border-color:var(--green)" onclick="reopenBugFromDetail(${bug.id})">Reopen issue</button>`;
+    }
+
+    document.getElementById('detail-backdrop').classList.add('open');
+  }
+
+  function section(label, value) {
+    return `<div class="detail-section"><div class="detail-label">${label}</div><div class="detail-value">${value}</div></div>`;
+  }
+
+  async function patchBug(id, status, note) {
+    const body = { status };
+    if (note) body.note = note;
+    await fetch(`${API}/api/bugs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
+  async function closeBugFromDetail(id)   { await patchBug(id, 'closed'); closeDetailPanel(); refresh(); }
+  async function approveBugFromDetail(id) { await patchBug(id, 'closed'); closeDetailPanel(); refresh(); }
+  async function reopenBugFromDetail(id)  {
+    if (detailBug?.status === 'review') { openKickbackModal(id, true); return; }
+    await patchBug(id, 'open');
+    closeDetailPanel();
+    refresh();
+  }
+
+  function closeDetail(e) { if (e.target === e.currentTarget) closeDetailPanel(); }
+  function closeDetailPanel() { document.getElementById('detail-backdrop').classList.remove('open'); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailPanel(); });
+
+  // ── Edit bug modal ─────────────────────────────────────────────────────────
+  let editingBugId = null;
+
+  function populateEditModal(bug) {
+    editingBugId = bug.id;
+    document.getElementById('eb-title').value = bug.title || '';
+    document.getElementById('eb-description').value = bug.description || '';
+    document.getElementById('eb-priority').value = bug.priority || 'medium';
+    document.getElementById('eb-type').value = bug.type || 'bug';
+    document.getElementById('eb-err').textContent = '';
+
+    const sel = document.getElementById('eb-project');
+    sel.innerHTML = '<option value="">— No project —</option>';
+    projects.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (p.id === bug.project_id) opt.selected = true;
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('modal-edit-bug').classList.add('open');
+    setTimeout(() => document.getElementById('eb-title').focus(), 50);
+  }
+
+  async function openEditModal(e, id) {
+    e.stopPropagation();
+    const bug = bugs.find(b => b.id === id);
+    if (bug) { populateEditModal(bug); return; }
+    const data = await fetch(`${API}/api/bugs/${id}`).then(r => r.json()).catch(() => null);
+    if (data) populateEditModal(data);
+  }
+
+  async function openEditModalById(id) {
+    const bug = bugs.find(b => b.id === id);
+    if (bug) { populateEditModal(bug); return; }
+    const data = await fetch(`${API}/api/bugs/${id}`).then(r => r.json()).catch(() => null);
+    if (data) populateEditModal(data);
+  }
+
+  async function saveEdit() {
+    const title = document.getElementById('eb-title').value.trim();
+    const err = document.getElementById('eb-err');
+    if (!title) { err.textContent = 'Title is required.'; return; }
+
+    const body = {
+      title,
+      description: document.getElementById('eb-description').value.trim() || null,
+      priority: document.getElementById('eb-priority').value,
+      type: document.getElementById('eb-type').value,
+      projectId: document.getElementById('eb-project').value || null,
+    };
+
+    const res = await fetch(`${API}/api/bugs/${editingBugId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) { err.textContent = data.error || 'Save failed.'; return; }
+    document.getElementById('modal-edit-bug').classList.remove('open');
+    refresh();
+  }
+
+  document.getElementById('eb-title').addEventListener('keydown', e => { if (e.key === 'Enter') saveEdit(); });
+
+  // ── Utilities ──────────────────────────────────────────────────────────────
+  const STATUS_ICON = { open: '🔓', review: '🔍', closed: '✅' };
+
+  function renderHistory(history) {
+    return `<div class="history-list">${history.map(h => {
+      const isKickback = h.from_status === 'review' && h.to_status === 'open';
+      const isFiled    = h.from_status === null;
+      const cls = isFiled ? 'filed' : isKickback ? 'kickback' : h.to_status === 'review' ? 'review' : h.to_status === 'closed' ? 'closed' : '';
+      const label = isFiled
+        ? `<span class="history-transition">Filed</span>`
+        : `<span class="history-transition">${STATUS_ICON[h.from_status] || ''} ${h.from_status} → ${STATUS_ICON[h.to_status] || ''} ${h.to_status}</span>`;
+      return `<div class="history-entry ${cls}">
+        <div>
+          <div class="history-meta">${label} · ${timeAgo(h.created_at)}</div>
+          ${h.note ? `<div class="history-note">${escHtml(h.note).replace(/\n/g, '<br>')}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function escHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function timeAgo(iso) {
+    const d = (Date.now() - new Date(iso)) / 1000;
+    if (d < 60) return 'just now';
+    if (d < 3600) return `${Math.round(d/60)}m ago`;
+    if (d < 86400) return `${Math.round(d/3600)}h ago`;
+    return `${Math.round(d/86400)}d ago`;
+  }
+
+  async function refresh() { await loadProjects(); await loadBugs(); }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  refresh();
+</script>
+</body>
+</html>
