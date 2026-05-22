@@ -94,3 +94,8 @@
 .pp-pin:hover .pp-pin-tooltip {
   opacity: 1;
 }
+
+.pp-pin-dot.pp-pin-active {
+  transform: scale(1.3);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4), 0 0 0 2px #fff, 0 0 0 5px rgba(99,102,241,0.5);
+}

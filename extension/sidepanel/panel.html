@@ -17,7 +17,7 @@
     .header-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 4px; font-size: 16px; line-height: 1; }
     .header-btn:hover { background: var(--border-hi); color: var(--text); }
 
-    #view-main, #view-picking, #view-form, #view-settings { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    #view-main, #view-picking, #view-form, #view-settings, #view-edit { display: none; flex: 1; flex-direction: column; overflow: hidden; }
     .active-view { display: flex !important; }
 
     /* ── Project selector ── */
@@ -50,6 +50,8 @@
     .issue-card.review-card { border-left: 3px solid rgba(168,85,247,0.4); }
     .review-reopen { margin-left: auto; background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 10px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; }
     .review-reopen:hover { border-color: #a855f7; color: #a855f7; }
+    .review-close { margin-left: auto; background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 10px; padding: 2px 7px; cursor: pointer; flex-shrink: 0; }
+    .review-close:hover { border-color: #22c55e; color: #22c55e; }
     .kickback-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
     .kickback-note { width: 100%; background: #1c1c28; border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: inherit; font-size: 11px; padding: 6px 8px; outline: none; resize: vertical; transition: border-color 0.15s; }
     .kickback-note:focus { border-color: var(--orange); }
@@ -82,6 +84,7 @@
     .form-inner { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
     .form-el-info { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
     .el-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 3px; }
+    .el-component { font-size: 11px; color: #a5b4fc; font-weight: 500; margin-bottom: 3px; }
     .el-selector { font-family: 'SF Mono', monospace; font-size: 11px; color: #6ee7b7; word-break: break-all; }
     .field label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
     .field input, .field textarea, .field select { width: 100%; background: #1c1c28; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 13px; padding: 7px 9px; outline: none; transition: border-color 0.15s; resize: vertical; }
@@ -96,6 +99,19 @@
     .submit-btn:disabled { background: #374151; cursor: not-allowed; }
     .back-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--muted); font-size: 13px; cursor: pointer; }
     .back-btn:hover { background: var(--border-hi); color: var(--text); }
+
+    .console-errors-badge { margin-top: 5px; font-size: 10px; color: var(--orange); font-weight: 500; }
+
+    #view-edit { overflow-y: auto; }
+    #view-edit::-webkit-scrollbar { width: 4px; }
+    #view-edit::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+    .edit-meta { display: flex; align-items: center; gap: 8px; padding: 2px 0 4px; }
+    .edit-issue-num { font-size: 11px; color: var(--muted); }
+    .edit-status-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.05em; }
+    .edit-status-badge.status-open { background: rgba(34,197,94,0.1); color: var(--green); }
+    .edit-status-badge.status-review { background: rgba(168,85,247,0.1); color: #a855f7; }
+    .delete-btn { background: none; border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; padding: 9px 12px; color: var(--red); font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+    .delete-btn:hover { background: rgba(239,68,68,0.08); border-color: var(--red); }
 
     #view-settings { overflow-y: auto; }
     .settings-inner { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
@@ -177,7 +193,9 @@
   <div class="form-inner">
     <div class="form-el-info">
       <div class="el-label">Pinned element</div>
+      <div class="el-component" id="form-component" style="display:none"></div>
       <div class="el-selector" id="form-selector"></div>
+      <div class="console-errors-badge" id="form-console-errors" style="display:none"></div>
     </div>
     <div class="field">
       <label>Title *</label>
@@ -210,10 +228,70 @@
         </select>
       </div>
     </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;text-transform:none;font-size:12px;font-weight:400;letter-spacing:0">
+        <input type="checkbox" id="f-screenshot" style="accent-color:var(--accent);width:14px;height:14px">
+        Attach screenshot
+      </label>
+    </div>
+    <div class="field">
+      <label>Breakpoint width (px)</label>
+      <input type="number" id="f-breakpoint-width" placeholder="e.g. 768" min="0" max="9999" step="1">
+    </div>
   </div>
   <div class="form-footer">
     <button class="back-btn" id="btn-back">← Back</button>
     <button class="submit-btn" id="btn-submit">Submit Issue →</button>
+  </div>
+</div>
+
+<!-- ── Edit view ── -->
+<div id="view-edit">
+  <div class="form-inner">
+    <div class="edit-meta">
+      <span class="edit-issue-num" id="edit-bug-num"></span>
+      <span class="edit-status-badge" id="edit-status-badge"></span>
+    </div>
+    <div class="field">
+      <label>Title *</label>
+      <input type="text" id="e-title" placeholder="Short description of the issue…">
+    </div>
+    <div class="field">
+      <label>What I expected</label>
+      <textarea id="e-expected" placeholder="What should have happened…"></textarea>
+    </div>
+    <div class="field">
+      <label>What I saw</label>
+      <textarea id="e-actual" placeholder="What actually happened…"></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Type</label>
+        <select id="e-type">
+          <option value="bug">🐛 Bug</option>
+          <option value="task">📋 Task</option>
+          <option value="enhancement">✨ Enhancement</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="e-priority">
+          <option value="medium">🟡 Medium</option>
+          <option value="low">🟢 Low</option>
+          <option value="high">🟠 High</option>
+          <option value="critical">🔴 Critical</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" id="e-selector-row" style="display:none">
+      <div class="el-label">Selector</div>
+      <div class="el-selector" id="e-selector"></div>
+    </div>
+  </div>
+  <div class="form-footer">
+    <button class="back-btn" id="btn-edit-cancel">← Back</button>
+    <button class="delete-btn" id="btn-edit-delete">Delete</button>
+    <button class="submit-btn" id="btn-edit-save">Save →</button>
   </div>
 </div>
 

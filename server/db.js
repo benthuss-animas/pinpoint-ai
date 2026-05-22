@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../data');
+export const DATA_DIR = path.join(__dirname, '../data');
 mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, 'pinpoint.db'));
@@ -49,8 +49,17 @@ db.exec(`
   );
 `);
 
+for (const sql of [
+  'ALTER TABLE bugs ADD COLUMN component_path TEXT',
+  'ALTER TABLE bugs ADD COLUMN screenshot_path TEXT',
+  'ALTER TABLE bugs ADD COLUMN breakpoint_width INTEGER',
+]) {
+  try { db.exec(sql); } catch {} // throws if column already exists — safe to ignore
+}
+
 // Strip any .pp-selected / .pp-hovered classes that were accidentally captured in selectors
 db.prepare(`UPDATE bugs SET selector = REPLACE(selector, '.pp-selected', '') WHERE selector LIKE '%.pp-selected%'`).run();
 db.prepare(`UPDATE bugs SET selector = REPLACE(selector, '.pp-hovered', '')  WHERE selector LIKE '%.pp-hovered%'`).run();
 
 export default db;
+

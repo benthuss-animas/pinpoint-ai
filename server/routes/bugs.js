@@ -1,11 +1,18 @@
 import express from 'express';
-import db from '../db.js';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import db, { DATA_DIR } from '../db.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCREENSHOTS_DIR = path.join(DATA_DIR, 'screenshots');
 
 const router = express.Router();
 
 function parseBug(bug) {
   if (!bug) return bug;
   try { bug.console_errors = JSON.parse(bug.console_errors || '[]'); } catch { bug.console_errors = []; }
+  try { bug.component_path = JSON.parse(bug.component_path || 'null'); } catch { bug.component_path = null; }
   return bug;
 }
 
@@ -49,27 +56,61 @@ router.get('/:id/history', (req, res) => {
   res.json(db.prepare('SELECT * FROM bug_history WHERE bug_id = ? ORDER BY created_at ASC').all(req.params.id));
 });
 
+// GET /api/bugs/:id/screenshot
+router.get('/:id/screenshot', (req, res) => {
+  const bug = db.prepare('SELECT screenshot_path FROM bugs WHERE id = ?').get(req.params.id);
+  if (!bug?.screenshot_path) return res.status(404).json({ error: 'No screenshot' });
+  const filePath = path.join(DATA_DIR, bug.screenshot_path);
+  if (!existsSync(filePath)) return res.status(404).json({ error: 'File missing' });
+  res.sendFile(filePath);
+});
+
 // POST /api/bugs
 router.post('/', (req, res) => {
-  const { projectId, title, description, type, priority, url, selector, xpath, elementHtml, consoleErrors, viewport, userAgent } = req.body;
+  const {
+    projectId, title, description, type, priority,
+    url, selector, elementHtml, consoleErrors, viewport, userAgent,
+    componentPath, breakpointWidth, screenshot,
+  } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Title is required' });
 
   const insert = db.transaction(() => {
     const { lastInsertRowid } = db.prepare(`
-      INSERT INTO bugs (project_id, title, description, type, priority, url, selector, xpath, element_html, console_errors, viewport_w, viewport_h, user_agent)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bugs (
+        project_id, title, description, type, priority,
+        url, selector, element_html, console_errors,
+        viewport_w, viewport_h, user_agent,
+        component_path, breakpoint_width
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       projectId || null, title.trim(), description?.trim() || null,
       type || 'bug', priority || 'medium',
-      url || null, selector || null, xpath || null, elementHtml || null,
+      url || null, selector || null, elementHtml || null,
       JSON.stringify(consoleErrors || []),
-      viewport?.width || null, viewport?.height || null, userAgent || null
+      viewport?.width || null, viewport?.height || null, userAgent || null,
+      componentPath?.length ? JSON.stringify(componentPath) : null,
+      breakpointWidth || null
     );
     db.prepare('INSERT INTO bug_history (bug_id, from_status, to_status) VALUES (?, NULL, ?)').run(lastInsertRowid, 'open');
     return lastInsertRowid;
   });
 
   const id = insert();
+
+  if (screenshot?.startsWith('data:image/png;base64,')) {
+    try {
+      mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+      writeFileSync(
+        path.join(SCREENSHOTS_DIR, `${id}.png`),
+        screenshot.replace(/^data:image\/png;base64,/, ''), 'base64'
+      );
+      db.prepare('UPDATE bugs SET screenshot_path = ? WHERE id = ?').run(`screenshots/${id}.png`, id);
+    } catch (err) {
+      console.error('[Pinpoint] Failed to save screenshot:', err.message);
+    }
+  }
+
   res.json({ success: true, bug: parseBug(db.prepare('SELECT * FROM bugs WHERE id = ?').get(id)) });
 });
 

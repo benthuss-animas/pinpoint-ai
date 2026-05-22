@@ -1,12 +1,13 @@
 let SERVER = 'http://localhost:3456';
 let currentTab = null;
 let selectedElement = null;
+let pendingScreenshot = null;
 let projects = [];
 let currentProjectId = null; // null = no project selected
 
 // ── Views ─────────────────────────────────────────────────────────────────
 function showView(name) {
-  ['main','picking','form','settings'].forEach(v => {
+  ['main','picking','form','settings','edit'].forEach(v => {
     document.getElementById(`view-${v}`).classList.toggle('active-view', v === name);
   });
 }
@@ -186,7 +187,7 @@ async function loadPageIssues(pageUrl) {
           <div class="priority-dot pd-${priority}"></div>
           <div class="issue-title">${escHtml(bug.title)}</div>
           <div class="issue-num">#${bug.id}</div>
-          ${isReview ? `<button class="review-reopen" data-id="${bug.id}">Reopen</button>` : ''}
+          ${isReview ? `<button class="review-close" data-id="${bug.id}">Close</button><button class="review-reopen" data-id="${bug.id}">Reopen</button>` : ''}
         </div>
         ${bug.selector ? `<div class="issue-sel">${escHtml(bug.selector)}</div>` : ''}
       `;
@@ -194,7 +195,17 @@ async function loadPageIssues(pageUrl) {
         card.addEventListener('mouseenter', () => sendToContent({ type: 'HIGHLIGHT_ELEMENT', selector: bug.selector }));
         card.addEventListener('mouseleave', () => sendToContent({ type: 'UNHIGHLIGHT_ELEMENT' }));
       }
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.review-close') || e.target.closest('.review-reopen') || e.target.closest('.kickback-form')) return;
+        openEditView(bug.id);
+      });
       if (isReview) {
+        card.querySelector('.review-close').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await fetch(`${SERVER}/api/bugs/${bug.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'closed' }) });
+          await loadPageIssues(pageUrl);
+          await sendToContent({ type: 'RELOAD_PINS' });
+        });
         card.querySelector('.review-reopen').addEventListener('click', (e) => {
           e.stopPropagation();
           // Toggle inline kickback form
@@ -276,7 +287,15 @@ document.addEventListener('keydown', async (e) => {
 
 // ── Element selected ───────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'ELEMENT_SELECTED') { selectedElement = msg.data; showFormView(); }
+  if (msg.type === 'ELEMENT_SELECTED') {
+    selectedElement = msg.data;
+    pendingScreenshot = null;
+    chrome.runtime.sendMessage(
+      { type: 'CAPTURE_SCREENSHOT', windowId: currentTab?.windowId },
+      (r) => { if (r?.dataUrl) pendingScreenshot = r.dataUrl; }
+    );
+    showFormView();
+  }
   if (msg.type === 'TAB_UPDATED') {
     if (document.getElementById('view-main').classList.contains('active-view')) loadMainView();
   }
@@ -284,7 +303,27 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 function showFormView() {
   showView('form');
+
+  const ctx = selectedElement?.componentContext;
+  const compEl = document.getElementById('form-component');
+  if (ctx) {
+    compEl.textContent = `In: ${ctx.value}`;
+    compEl.style.display = '';
+  } else {
+    compEl.style.display = 'none';
+  }
+
   document.getElementById('form-selector').textContent = selectedElement?.selector || '—';
+
+  const errCount = (selectedElement?.consoleErrors || []).length;
+  const badge = document.getElementById('form-console-errors');
+  if (errCount > 0) {
+    badge.textContent = `${errCount} console error${errCount > 1 ? 's' : ''} captured`;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+
   const btn = document.getElementById('btn-submit');
   btn.disabled = false;
   btn.textContent = 'Submit Issue →';
@@ -294,6 +333,9 @@ function showFormView() {
 // ── Form submit ────────────────────────────────────────────────────────────
 document.getElementById('btn-back').addEventListener('click', async () => {
   selectedElement = null;
+  pendingScreenshot = null;
+  document.getElementById('f-screenshot').checked = false;
+  document.getElementById('f-breakpoint-width').value = '';
   await sendToContent({ type: 'CLEAR_SELECTION' });
   await loadMainView();
 });
@@ -316,11 +358,15 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
     priority: document.getElementById('f-priority').value,
     url: selectedElement?.url,
     selector: selectedElement?.selector,
-    xpath: selectedElement?.xpath,
     elementHtml: selectedElement?.elementHtml,
     viewport: selectedElement?.viewport,
-    consoleErrors: [],
+    consoleErrors: selectedElement?.consoleErrors || [],
     userAgent: selectedElement?.userAgent,
+    componentPath: selectedElement?.componentPath || [],
+    breakpointWidth: document.getElementById('f-breakpoint-width').value
+      ? parseInt(document.getElementById('f-breakpoint-width').value, 10) : null,
+    screenshot: (document.getElementById('f-screenshot').checked && pendingScreenshot)
+      ? pendingScreenshot : null,
   };
 
   try {
@@ -335,7 +381,10 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
       document.getElementById('f-title').value = '';
       document.getElementById('f-expected').value = '';
       document.getElementById('f-actual').value = '';
+      document.getElementById('f-screenshot').checked = false;
+      document.getElementById('f-breakpoint-width').value = '';
       selectedElement = null;
+      pendingScreenshot = null;
       await sendToContent({ type: 'RELOAD_PINS' });
       await loadMainView();
     } else {
@@ -346,6 +395,135 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
     toast(`Network error: ${err.message}`, 'error');
     btn.disabled = false; btn.textContent = 'Submit Issue →';
   }
+});
+
+// ── Edit view ─────────────────────────────────────────────────────────────
+let editingBugId = null;
+
+function parseDescription(desc) {
+  if (!desc) return { expected: '', actual: '' };
+  const expMatch = desc.match(/\*\*Expected:\*\*\s*([\s\S]*?)(?:\n\n|$)/);
+  const actMatch = desc.match(/\*\*What I saw:\*\*\s*([\s\S]*?)(?:\n\n|$)/);
+  return {
+    expected: expMatch ? expMatch[1].trim() : '',
+    actual: actMatch ? actMatch[1].trim() : '',
+  };
+}
+
+async function openEditView(bugId) {
+  editingBugId = bugId;
+  showView('edit');
+
+  document.getElementById('edit-bug-num').textContent = '';
+  document.getElementById('edit-status-badge').textContent = '';
+  document.getElementById('e-title').value = '';
+  document.getElementById('e-expected').value = '';
+  document.getElementById('e-actual').value = '';
+
+  try {
+    const res = await fetch(`${SERVER}/api/bugs/${bugId}`);
+    if (!res.ok) { toast('Could not load issue.', 'error'); await loadMainView(); return; }
+    const bug = await res.json();
+
+    document.getElementById('edit-bug-num').textContent = `#${bug.id}`;
+    const badge = document.getElementById('edit-status-badge');
+    badge.textContent = bug.status;
+    badge.className = `edit-status-badge status-${bug.status}`;
+
+    document.getElementById('e-title').value = bug.title || '';
+    document.getElementById('e-type').value = bug.type || 'bug';
+    document.getElementById('e-priority').value = bug.priority || 'medium';
+
+    const { expected, actual } = parseDescription(bug.description);
+    document.getElementById('e-expected').value = expected;
+    document.getElementById('e-actual').value = actual;
+
+    const selRow = document.getElementById('e-selector-row');
+    if (bug.selector) {
+      document.getElementById('e-selector').textContent = bug.selector;
+      selRow.style.display = '';
+      sendToContent({ type: 'HIGHLIGHT_ELEMENT', selector: bug.selector });
+    } else {
+      selRow.style.display = 'none';
+    }
+
+    document.getElementById('e-title').focus();
+  } catch (err) {
+    toast(`Error: ${err.message}`, 'error');
+    await loadMainView();
+  }
+}
+
+document.getElementById('btn-edit-save').addEventListener('click', async () => {
+  const title = document.getElementById('e-title').value.trim();
+  if (!title) { toast('Title is required.', 'error'); document.getElementById('e-title').focus(); return; }
+
+  const expected = document.getElementById('e-expected').value.trim();
+  const actual = document.getElementById('e-actual').value.trim();
+  const description = [
+    expected && `**Expected:** ${expected}`,
+    actual   && `**What I saw:** ${actual}`,
+  ].filter(Boolean).join('\n\n') || null;
+
+  const btn = document.getElementById('btn-edit-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const res = await fetch(`${SERVER}/api/bugs/${editingBugId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        description,
+        type: document.getElementById('e-type').value,
+        priority: document.getElementById('e-priority').value,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('Saved ✓', 'success');
+      sendToContent({ type: 'UNHIGHLIGHT_ELEMENT' });
+      await sendToContent({ type: 'RELOAD_PINS' });
+      await loadMainView();
+    } else {
+      toast(`Error: ${data.error}`, 'error');
+      btn.disabled = false; btn.textContent = 'Save →';
+    }
+  } catch (err) {
+    toast(`Network error: ${err.message}`, 'error');
+    btn.disabled = false; btn.textContent = 'Save →';
+  }
+});
+
+document.getElementById('btn-edit-delete').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-edit-delete');
+  if (btn.dataset.confirm !== '1') {
+    btn.textContent = 'Confirm delete';
+    btn.dataset.confirm = '1';
+    setTimeout(() => {
+      if (btn.dataset.confirm === '1') {
+        btn.textContent = 'Delete';
+        delete btn.dataset.confirm;
+      }
+    }, 3000);
+    return;
+  }
+  try {
+    await fetch(`${SERVER}/api/bugs/${editingBugId}`, { method: 'DELETE' });
+    toast('Deleted.', 'success');
+    sendToContent({ type: 'UNHIGHLIGHT_ELEMENT' });
+    await sendToContent({ type: 'RELOAD_PINS' });
+    editingBugId = null;
+    await loadMainView();
+  } catch (err) {
+    toast(`Delete failed: ${err.message}`, 'error');
+  }
+});
+
+document.getElementById('btn-edit-cancel').addEventListener('click', async () => {
+  editingBugId = null;
+  sendToContent({ type: 'UNHIGHLIGHT_ELEMENT' });
+  await loadMainView();
 });
 
 // ── Settings ───────────────────────────────────────────────────────────────
@@ -382,6 +560,9 @@ function escHtml(s) {
 let _port = connectPort();
 function connectPort() {
   const p = chrome.runtime.connect({ name: 'sidepanel' });
+  p.onMessage.addListener((msg) => {
+    if (msg.type === 'PIN_CLICKED') openEditView(msg.bugId);
+  });
   p.onDisconnect.addListener(() => { _port = connectPort(); }); // reconnect if SW restarts
   return p;
 }
