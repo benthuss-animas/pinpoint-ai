@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Pinpoint",
   "version": "1.5.0",
-  "description": "Pin bugs and tasks to page elements. File as GitHub Issues.",
+  "description": "Pin bugs and tasks to page elements. File to a local SQLite database.",
   "permissions": ["activeTab", "tabs", "storage", "sidePanel"],
   "host_permissions": ["<all_urls>"],
   "background": {

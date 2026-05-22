@@ -37,14 +37,17 @@ extension/            Chrome MV3 extension (load unpacked from this dir)
   manifest.json
   service-worker.js   Opens side panel on icon click; relays TAB_UPDATED
   content/
-    content.js        Renders pin dots on elements with open bugs; handles pick mode
+    console-capture.js  Runs in MAIN world; captures console.error/warn + uncaught
+                        errors into window.__ppErrors before pick
+    content.js          Renders pin dots on elements with open bugs; handles pick mode
     content.css
   sidepanel/
-    panel.html        Side panel UI
-    panel.js          Communicates with content script and server API
+    panel.html          Side panel UI
+    panel.js            Communicates with content script and server API
 
 data/
-  pinpoint.db         SQLite database (auto-created, gitignored)
+  pinpoint.db           SQLite database (auto-created, gitignored)
+  screenshots/          PNG screenshots saved per bug (auto-created, gitignored)
 ```
 
 ## Database schema
@@ -52,15 +55,17 @@ data/
 Three tables — all created/migrated in `db.js` on startup:
 
 - `projects` — named groups with optional `url_pattern`
-- `bugs` — the main issue records; `status` is `open` | `review` | `closed`
+- `bugs` — the main issue records; `status` is `open` | `review` | `closed`; also stores `component_path` (JSON array of component names, if detectable) and `screenshot_path` (relative path to PNG in `data/screenshots/`)
 - `bug_history` — append-only status transition log per bug
 
 ## Key API endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/bugs?status=open` | List bugs (filterable by `status`, `projectId`) |
+| GET | `/api/bugs?status=open` | List bugs (filterable by `status`, `projectId`; `status` accepts comma-separated values) |
 | GET | `/api/bugs/:id` | Single bug + history |
+| GET | `/api/bugs/:id/screenshot` | Serve the PNG screenshot for a bug |
+| GET | `/api/bugs/:id/history` | Status transition log for a bug |
 | POST | `/api/bugs` | Create bug |
 | PATCH | `/api/bugs/:id` | Update status/fields (logs history transition) |
 | DELETE | `/api/bugs/:id` | Delete bug |
@@ -75,4 +80,4 @@ See `fix-issues.md` for the full workflow. The key rules:
 
 ## Chrome extension
 
-Load `extension/` as an unpacked extension in Chrome. The extension talks to `http://localhost:3456` — the server must be running. Content script injects pin dots; the side panel is the main UI. `pp-selected` and `pp-hovered` CSS classes on the highlight overlay are stripped from selectors before storage (see `db.js` and `content.js`).
+Load `extension/` as an unpacked extension in Chrome. The extension talks to `http://localhost:3456` — the server must be running. `console-capture.js` runs in the `MAIN` world at `document_start` to intercept console errors before any page JS runs; `content.js` runs in the isolated world and reads errors via a `pp-read-errors` custom event. Content script injects pin dots; the side panel is the main UI. `pp-selected` and `pp-hovered` CSS classes on the highlight overlay are stripped from selectors before storage (see `db.js` and `content.js`).
