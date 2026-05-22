@@ -5,6 +5,46 @@ let pendingScreenshot = null;
 let projects = [];
 let currentProjectId = null; // null = no project selected
 
+// ── Screenshot crop ───────────────────────────────────────────────────────
+const CROP_PADDING = 48; // px around element (at CSS pixel scale)
+
+function cropScreenshotToElement(dataUrl, elementData) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const { elementRect, viewport, devicePixelRatio = 1 } = elementData;
+      if (!elementRect || !viewport) { resolve(dataUrl); return; }
+
+      // captureVisibleTab returns a bitmap scaled by devicePixelRatio
+      const dpr = devicePixelRatio;
+      const pad = CROP_PADDING;
+
+      // Clamp crop rect to viewport bounds before scaling
+      const cssX = Math.max(0, elementRect.x - pad);
+      const cssY = Math.max(0, elementRect.y - pad);
+      const cssRight  = Math.min(viewport.width,  elementRect.x + elementRect.width  + pad);
+      const cssBottom = Math.min(viewport.height, elementRect.y + elementRect.height + pad);
+      const cssW = cssRight  - cssX;
+      const cssH = cssBottom - cssY;
+
+      // Scale to physical pixels used in the captured bitmap
+      const sx = Math.round(cssX * dpr);
+      const sy = Math.round(cssY * dpr);
+      const sw = Math.round(cssW * dpr);
+      const sh = Math.round(cssH * dpr);
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = sw;
+      canvas.height = sh;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
 // ── Views ─────────────────────────────────────────────────────────────────
 function showView(name) {
   ['main','picking','form','settings','edit'].forEach(v => {
@@ -292,7 +332,13 @@ chrome.runtime.onMessage.addListener((msg) => {
     pendingScreenshot = null;
     chrome.runtime.sendMessage(
       { type: 'CAPTURE_SCREENSHOT', windowId: currentTab?.windowId },
-      (r) => { if (r?.dataUrl) pendingScreenshot = r.dataUrl; }
+      (r) => {
+        if (r?.dataUrl) {
+          cropScreenshotToElement(r.dataUrl, msg.data)
+            .then(cropped => { pendingScreenshot = cropped; })
+            .catch(() => { pendingScreenshot = r.dataUrl; }); // fall back to full viewport
+        }
+      }
     );
     showFormView();
   }
@@ -335,7 +381,6 @@ document.getElementById('btn-back').addEventListener('click', async () => {
   selectedElement = null;
   pendingScreenshot = null;
   document.getElementById('f-screenshot').checked = false;
-  document.getElementById('f-breakpoint-width').value = '';
   await sendToContent({ type: 'CLEAR_SELECTION' });
   await loadMainView();
 });
@@ -363,8 +408,6 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
     consoleErrors: selectedElement?.consoleErrors || [],
     userAgent: selectedElement?.userAgent,
     componentPath: selectedElement?.componentPath || [],
-    breakpointWidth: document.getElementById('f-breakpoint-width').value
-      ? parseInt(document.getElementById('f-breakpoint-width').value, 10) : null,
     screenshot: (document.getElementById('f-screenshot').checked && pendingScreenshot)
       ? pendingScreenshot : null,
   };
@@ -382,8 +425,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
       document.getElementById('f-expected').value = '';
       document.getElementById('f-actual').value = '';
       document.getElementById('f-screenshot').checked = false;
-      document.getElementById('f-breakpoint-width').value = '';
-      selectedElement = null;
+          selectedElement = null;
       pendingScreenshot = null;
       await sendToContent({ type: 'RELOAD_PINS' });
       await loadMainView();

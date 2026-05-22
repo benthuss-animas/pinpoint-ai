@@ -70,7 +70,7 @@ router.post('/', (req, res) => {
   const {
     projectId, title, description, type, priority,
     url, selector, elementHtml, consoleErrors, viewport, userAgent,
-    componentPath, breakpointWidth, screenshot,
+    componentPath, screenshot,
   } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Title is required' });
 
@@ -80,17 +80,16 @@ router.post('/', (req, res) => {
         project_id, title, description, type, priority,
         url, selector, element_html, console_errors,
         viewport_w, viewport_h, user_agent,
-        component_path, breakpoint_width
+        component_path
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       projectId || null, title.trim(), description?.trim() || null,
       type || 'bug', priority || 'medium',
       url || null, selector || null, elementHtml || null,
       JSON.stringify(consoleErrors || []),
       viewport?.width || null, viewport?.height || null, userAgent || null,
-      componentPath?.length ? JSON.stringify(componentPath) : null,
-      breakpointWidth || null
+      componentPath?.length ? JSON.stringify(componentPath) : null
     );
     db.prepare('INSERT INTO bug_history (bug_id, from_status, to_status) VALUES (?, NULL, ?)').run(lastInsertRowid, 'open');
     return lastInsertRowid;

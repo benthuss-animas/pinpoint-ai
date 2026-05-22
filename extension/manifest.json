@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pinpoint",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Pin bugs and tasks to page elements. File as GitHub Issues.",
   "permissions": ["activeTab", "tabs", "storage", "sidePanel"],
   "host_permissions": ["<all_urls>"],

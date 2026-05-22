@@ -315,6 +315,13 @@ function startPicking() {
     const componentContext = getComponentContext(el);
     const componentPath = getComponentPath(el);
     const pickTime = Date.now();
+    const domRect = el.getBoundingClientRect();
+    const elementRect = {
+      x: Math.round(domRect.x),
+      y: Math.round(domRect.y),
+      width: Math.round(domRect.width),
+      height: Math.round(domRect.height),
+    };
     el.classList.add('pp-selected');
 
     const rawErrors = await readConsoleErrors();
@@ -327,6 +334,8 @@ function startPicking() {
         elementHtml,
         url: window.location.href,
         viewport: { width: window.innerWidth, height: window.innerHeight },
+        devicePixelRatio: window.devicePixelRatio || 1,
+        elementRect,
         userAgent: navigator.userAgent,
         consoleErrors,
         componentContext,
