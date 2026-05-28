@@ -126,7 +126,7 @@ document.getElementById('project-select').addEventListener('change', async (e) =
   currentProjectId = e.target.value ? Number(e.target.value) : null;
   await rememberProject(currentProjectId, currentTab?.url);
   await loadPageIssues(currentTab?.url);
-  await sendToContent({ type: 'RELOAD_PINS' });
+  await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
 });
 
 // ── New project inline form ────────────────────────────────────────────────
@@ -185,7 +185,7 @@ async function loadMainView() {
   renderProjectSelect();
 
   notifyPanelTab();
-  sendToContent({ type: 'RELOAD_PINS' });
+  sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
   await loadPageIssues(currentTab.url);
 }
 
@@ -242,9 +242,10 @@ async function loadPageIssues(pageUrl) {
       if (isReview) {
         card.querySelector('.review-close').addEventListener('click', async (e) => {
           e.stopPropagation();
-          await fetch(`${SERVER}/api/bugs/${bug.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'closed' }) });
+          const res = await fetch(`${SERVER}/api/bugs/${bug.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'closed' }) });
+          if (!res.ok) { toast('Failed to close issue.', 'error'); return; }
           await loadPageIssues(pageUrl);
-          await sendToContent({ type: 'RELOAD_PINS' });
+          await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
         });
         card.querySelector('.review-reopen').addEventListener('click', (e) => {
           e.stopPropagation();
@@ -265,9 +266,10 @@ async function loadPageIssues(pageUrl) {
           async function doReopen(note) {
             const body = { status: 'open' };
             if (note) body.note = note;
-            await fetch(`${SERVER}/api/bugs/${bug.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const res = await fetch(`${SERVER}/api/bugs/${bug.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!res.ok) { toast('Failed to reopen issue.', 'error'); return; }
             await loadPageIssues(pageUrl);
-            await sendToContent({ type: 'RELOAD_PINS' });
+            await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
           }
 
           form.querySelector('.kb-skip').addEventListener('click', (e) => { e.stopPropagation(); doReopen(null); });
@@ -334,9 +336,10 @@ chrome.runtime.onMessage.addListener((msg) => {
       { type: 'CAPTURE_SCREENSHOT', windowId: currentTab?.windowId },
       (r) => {
         if (r?.dataUrl) {
+          pendingScreenshot = r.dataUrl; // available immediately (full viewport)
           cropScreenshotToElement(r.dataUrl, msg.data)
-            .then(cropped => { pendingScreenshot = cropped; })
-            .catch(() => { pendingScreenshot = r.dataUrl; }); // fall back to full viewport
+            .then(cropped => { pendingScreenshot = cropped; }) // replace with crop when ready
+            .catch(() => {}); // keep full viewport on crop failure
         }
       }
     );
@@ -427,7 +430,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
       document.getElementById('f-screenshot').checked = false;
           selectedElement = null;
       pendingScreenshot = null;
-      await sendToContent({ type: 'RELOAD_PINS' });
+      await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
       await loadMainView();
     } else {
       toast(`Error: ${data.error}`, 'error');
@@ -525,7 +528,7 @@ document.getElementById('btn-edit-save').addEventListener('click', async () => {
     if (data.success) {
       toast('Saved ✓', 'success');
       sendToContent({ type: 'UNHIGHLIGHT_ELEMENT' });
-      await sendToContent({ type: 'RELOAD_PINS' });
+      await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
       await loadMainView();
     } else {
       toast(`Error: ${data.error}`, 'error');
@@ -551,10 +554,11 @@ document.getElementById('btn-edit-delete').addEventListener('click', async () =>
     return;
   }
   try {
-    await fetch(`${SERVER}/api/bugs/${editingBugId}`, { method: 'DELETE' });
+    const res = await fetch(`${SERVER}/api/bugs/${editingBugId}`, { method: 'DELETE' });
+    if (!res.ok) { toast('Delete failed.', 'error'); return; }
     toast('Deleted.', 'success');
     sendToContent({ type: 'UNHIGHLIGHT_ELEMENT' });
-    await sendToContent({ type: 'RELOAD_PINS' });
+    await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
     editingBugId = null;
     await loadMainView();
   } catch (err) {
@@ -589,7 +593,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
 });
 
 document.getElementById('btn-refresh').addEventListener('click', async () => {
-  await sendToContent({ type: 'RELOAD_PINS' });
+  await sendToContent({ type: 'RELOAD_PINS', projectId: currentProjectId });
   await loadMainView();
 });
 

@@ -177,6 +177,9 @@
         <button class="tab" onclick="switchStatus('closed', this)">Closed</button>
       </div>
     </div>
+    <div id="server-err" style="display:none;padding:10px 20px;background:rgba(239,68,68,0.08);border-bottom:1px solid rgba(239,68,68,0.3);color:#ef4444;font-size:12px">
+      Cannot reach Pinpoint server — <button onclick="refresh()" style="color:#ef4444;text-decoration:underline;background:none;border:none;cursor:pointer;font-size:12px;padding:0">Retry</button>
+    </div>
     <div class="bug-list" id="bug-list">
       <div class="state"><div class="icon">🔄</div><div class="msg">Loading…</div></div>
     </div>
@@ -291,7 +294,8 @@
   function countForStatus(p, status) {
     if (status === 'open')   return p.open_count;
     if (status === 'review') return p.review_count;
-    return p.total_count - p.open_count - p.review_count;
+    if (status === 'closed') return p.closed_count ?? 0;
+    return 0;
   }
 
   function renderSidebar() {
@@ -331,7 +335,9 @@
     const params = new URLSearchParams({ status: currentStatus });
     if (selectedProjectId) params.set('projectId', selectedProjectId);
 
-    bugs = await fetch(`${API}/api/bugs?${params}`).then(r => r.json()).catch(() => []);
+    bugs = await fetch(`${API}/api/bugs?${params}`)
+      .then(r => { document.getElementById('server-err').style.display = 'none'; return r.json(); })
+      .catch(() => { document.getElementById('server-err').style.display = ''; return []; });
     renderBugs();
   }
 
@@ -398,25 +404,29 @@
 
   async function approveBug(e, id) {
     e.stopPropagation();
-    await fetch(`${API}/api/bugs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'closed' }) });
-    refresh();
+    try { await patchBug(id, 'closed'); refresh(); } catch (err) { showError(err.message); }
   }
 
-  async function closeBug(e, id) { e.stopPropagation(); await patchBug(id, 'closed'); refresh(); }
+  async function closeBug(e, id) {
+    e.stopPropagation();
+    try { await patchBug(id, 'closed'); refresh(); } catch (err) { showError(err.message); }
+  }
 
   async function reopenBug(e, id) {
     e.stopPropagation();
     const bug = bugs.find(b => b.id === id);
     if (bug?.status === 'review') { openKickbackModal(id); return; }
-    await patchBug(id, 'open');
-    refresh();
+    try { await patchBug(id, 'open'); refresh(); } catch (err) { showError(err.message); }
   }
 
   async function deleteBug(e, id) {
     e.stopPropagation();
     if (!confirm('Delete this bug permanently?')) return;
-    await fetch(`${API}/api/bugs/${id}`, { method: 'DELETE' });
-    refresh();
+    try {
+      const res = await fetch(`${API}/api/bugs/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      refresh();
+    } catch (err) { showError(err.message); }
   }
 
   // ── Status tabs ────────────────────────────────────────────────────────────
@@ -493,12 +503,13 @@
 
     body.innerHTML = `
       ${bug.project_name ? section('Project', `<span class="badge badge-project">${escHtml(bug.project_name)}</span>`) : ''}
-      ${section('Status / Priority / Type', `${bug.status} · ${bug.priority} · ${bug.type}`)}
+      ${section('Status / Priority / Type', `${escHtml(bug.status)} · ${escHtml(bug.priority)} · ${escHtml(bug.type)}`)}
       ${bug.url ? section('URL', `<code>${escHtml(bug.url)}</code>`) : ''}
       ${bug.selector ? section('CSS Selector', `<code>${escHtml(bug.selector)}</code>`) : ''}
       ${bug.element_html ? section('Element HTML', `<pre>${escHtml(bug.element_html)}</pre>`) : ''}
       ${bug.description ? section('Description', escHtml(bug.description).replace(/\n/g, '<br>')) : ''}
-      ${errors.length ? section('Console Errors', `<pre>${errors.map(escHtml).join('\n')}</pre>`) : ''}
+      ${errors.length ? section('Console Errors', `<pre>${errors.map(e => escHtml(`[${e.level}] ${e.msg}`)).join('\n')}</pre>`) : ''}
+      ${bug.screenshot_path ? section('Screenshot', `<img src="/api/bugs/${bug.id}/screenshot" style="max-width:100%;border-radius:4px;margin-top:4px" loading="lazy">`) : ''}
       ${section('Metadata', `ID #${bug.id} · ${bug.viewport_w ? `${bug.viewport_w}×${bug.viewport_h}` : 'unknown viewport'} · filed ${timeAgo(bug.created_at)}`)}
       ${history.length ? section('History', renderHistory(history)) : ''}
     `;
@@ -525,20 +536,24 @@
   async function patchBug(id, status, note) {
     const body = { status };
     if (note) body.note = note;
-    await fetch(`${API}/api/bugs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(`${API}/api/bugs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
   }
-  async function closeBugFromDetail(id)   { await patchBug(id, 'closed'); closeDetailPanel(); refresh(); }
-  async function approveBugFromDetail(id) { await patchBug(id, 'closed'); closeDetailPanel(); refresh(); }
+  async function closeBugFromDetail(id)   { try { await patchBug(id, 'closed'); closeDetailPanel(); refresh(); } catch (err) { showError(err.message); } }
+  async function approveBugFromDetail(id) { try { await patchBug(id, 'closed'); closeDetailPanel(); refresh(); } catch (err) { showError(err.message); } }
   async function reopenBugFromDetail(id)  {
     if (detailBug?.status === 'review') { openKickbackModal(id, true); return; }
-    await patchBug(id, 'open');
-    closeDetailPanel();
-    refresh();
+    try { await patchBug(id, 'open'); closeDetailPanel(); refresh(); } catch (err) { showError(err.message); }
   }
 
   function closeDetail(e) { if (e.target === e.currentTarget) closeDetailPanel(); }
   function closeDetailPanel() { document.getElementById('detail-backdrop').classList.remove('open'); }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailPanel(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+      closeDetailPanel();
+    }
+  });
 
   // ── Edit bug modal ─────────────────────────────────────────────────────────
   let editingBugId = null;
@@ -567,15 +582,11 @@
 
   async function openEditModal(e, id) {
     e.stopPropagation();
-    const bug = bugs.find(b => b.id === id);
-    if (bug) { populateEditModal(bug); return; }
     const data = await fetch(`${API}/api/bugs/${id}`).then(r => r.json()).catch(() => null);
     if (data) populateEditModal(data);
   }
 
   async function openEditModalById(id) {
-    const bug = bugs.find(b => b.id === id);
-    if (bug) { populateEditModal(bug); return; }
     const data = await fetch(`${API}/api/bugs/${id}`).then(r => r.json()).catch(() => null);
     if (data) populateEditModal(data);
   }
@@ -616,7 +627,7 @@
       const cls = isFiled ? 'filed' : isKickback ? 'kickback' : h.to_status === 'review' ? 'review' : h.to_status === 'closed' ? 'closed' : '';
       const label = isFiled
         ? `<span class="history-transition">Filed</span>`
-        : `<span class="history-transition">${STATUS_ICON[h.from_status] || ''} ${h.from_status} → ${STATUS_ICON[h.to_status] || ''} ${h.to_status}</span>`;
+        : `<span class="history-transition">${STATUS_ICON[h.from_status] || ''} ${escHtml(h.from_status)} → ${STATUS_ICON[h.to_status] || ''} ${escHtml(h.to_status)}</span>`;
       return `<div class="history-entry ${cls}">
         <div>
           <div class="history-meta">${label} · ${timeAgo(h.created_at)}</div>
@@ -628,14 +639,29 @@
 
   function escHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function timeAgo(iso) {
-    const d = (Date.now() - new Date(iso)) / 1000;
+    // SQLite datetime('now') returns 'YYYY-MM-DD HH:MM:SS' without timezone;
+    // treat as UTC by normalising to ISO 8601 before parsing.
+    const normalised = iso && !iso.includes('T') ? iso.replace(' ', 'T') + 'Z' : iso;
+    const d = (Date.now() - new Date(normalised)) / 1000;
     if (d < 60) return 'just now';
     if (d < 3600) return `${Math.round(d/60)}m ago`;
     if (d < 86400) return `${Math.round(d/3600)}h ago`;
     return `${Math.round(d/86400)}d ago`;
   }
 
-  async function refresh() { await loadProjects(); await loadBugs(); }
+  function showError(msg) {
+    const banner = document.getElementById('server-err');
+    banner.textContent = `Error: ${msg} — `;
+    const retry = document.createElement('button');
+    retry.textContent = 'Retry';
+    retry.onclick = refresh;
+    retry.style.cssText = 'color:#ef4444;text-decoration:underline;background:none;border:none;cursor:pointer;font-size:12px;padding:0';
+    banner.appendChild(retry);
+    banner.style.display = '';
+    setTimeout(() => { if (banner.style.display !== 'none') banner.style.display = 'none'; }, 5000);
+  }
+
+  async function refresh() { await Promise.all([loadProjects(), loadBugs()]); }
 
   // ── Init ───────────────────────────────────────────────────────────────────
   refresh();

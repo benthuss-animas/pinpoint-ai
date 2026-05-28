@@ -2,8 +2,11 @@ chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
+// Only relay TAB_UPDATED for the tab the panel is watching, not every tab.
+let panelTabId = null;
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === 'complete') {
+  if (changeInfo.status === 'complete' && tabId === panelTabId) {
     chrome.runtime.sendMessage({ type: 'TAB_UPDATED', tabId }).catch(() => {});
   }
 });
@@ -14,13 +17,13 @@ let panelPort = null;
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'sidepanel') return;
   panelPort = port;
-  let tabId = null;
   port.onMessage.addListener((msg) => {
-    if (msg.type === 'PANEL_TAB') tabId = msg.tabId;
+    if (msg.type === 'PANEL_TAB') panelTabId = msg.tabId;
   });
   port.onDisconnect.addListener(() => {
     panelPort = null;
-    if (tabId != null) chrome.tabs.sendMessage(tabId, { type: 'HIDE_PINS' }).catch(() => {});
+    if (panelTabId != null) chrome.tabs.sendMessage(panelTabId, { type: 'HIDE_PINS' }).catch(() => {});
+    panelTabId = null;
   });
 });
 

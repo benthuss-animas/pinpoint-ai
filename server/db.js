@@ -16,7 +16,7 @@ db.exec(`
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL UNIQUE,
     url_pattern TEXT,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 
   CREATE TABLE IF NOT EXISTS bugs (
@@ -35,8 +35,8 @@ db.exec(`
     viewport_w    INTEGER,
     viewport_h    INTEGER,
     user_agent    TEXT,
-    created_at    TEXT DEFAULT (datetime('now')),
-    updated_at    TEXT DEFAULT (datetime('now'))
+    created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 
   CREATE TABLE IF NOT EXISTS bug_history (
@@ -45,21 +45,30 @@ db.exec(`
     from_status TEXT,
     to_status   TEXT NOT NULL,
     note        TEXT,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 `);
 
 for (const sql of [
   'ALTER TABLE bugs ADD COLUMN component_path TEXT',
   'ALTER TABLE bugs ADD COLUMN screenshot_path TEXT',
-  'ALTER TABLE bugs ADD COLUMN breakpoint_width INTEGER',
 ]) {
-  try { db.exec(sql); } catch {} // throws if column already exists — safe to ignore
+  try {
+    db.exec(sql);
+  } catch (err) {
+    if (!err.message.includes('duplicate column')) throw err;
+  }
 }
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_bugs_status      ON bugs(status);
+  CREATE INDEX IF NOT EXISTS idx_bugs_proj_status ON bugs(project_id, status);
+  CREATE INDEX IF NOT EXISTS idx_bugs_created     ON bugs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_bug_history_bug  ON bug_history(bug_id);
+`);
 
 // Strip any .pp-selected / .pp-hovered classes that were accidentally captured in selectors
 db.prepare(`UPDATE bugs SET selector = REPLACE(selector, '.pp-selected', '') WHERE selector LIKE '%.pp-selected%'`).run();
 db.prepare(`UPDATE bugs SET selector = REPLACE(selector, '.pp-hovered', '')  WHERE selector LIKE '%.pp-hovered%'`).run();
 
 export default db;
-

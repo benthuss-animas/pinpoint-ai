@@ -8,6 +8,7 @@ router.get('/', (_req, res) => {
     SELECT p.*,
            COUNT(CASE WHEN b.status = 'open'   THEN 1 END) AS open_count,
            COUNT(CASE WHEN b.status = 'review' THEN 1 END) AS review_count,
+           COUNT(CASE WHEN b.status = 'closed' THEN 1 END) AS closed_count,
            COUNT(b.id)                                      AS total_count
     FROM projects p
     LEFT JOIN bugs b ON b.project_id = p.id
@@ -35,13 +36,19 @@ router.patch('/:id', (req, res) => {
   const map = { name: req.body.name, url_pattern: req.body.urlPattern };
   const entries = Object.entries(map).filter(([, v]) => v !== undefined);
   if (!entries.length) return res.json({ success: true });
-  db.prepare(`UPDATE projects SET ${entries.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ?`)
-    .run(...entries.map(([, v]) => v), req.params.id);
-  res.json({ success: true });
+  try {
+    db.prepare(`UPDATE projects SET ${entries.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ?`)
+      .run(...entries.map(([, v]) => v), req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A project with that name already exists' });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.delete('/:id', (req, res) => {
-  db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+  const { changes } = db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+  if (!changes) return res.status(404).json({ error: 'Project not found' });
   res.json({ success: true });
 });
 

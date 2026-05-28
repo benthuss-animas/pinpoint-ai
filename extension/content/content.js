@@ -5,7 +5,10 @@
  *  2. Handle element-picking mode when activated by the side panel
  */
 
-const SERVER = 'http://localhost:3456';
+let SERVER = 'http://localhost:3456';
+
+// Load user's custom server URL if set
+chrome.storage.local.get('serverUrl', r => { if (r.serverUrl) SERVER = r.serverUrl; });
 
 // ── Pin layer ─────────────────────────────────────────────────────────────
 const pinLayer = document.createElement('div');
@@ -17,8 +20,10 @@ pinLayer.style.display = 'none'; // shown only while panel is open
 // Map of bugId → { targetEl, pinEl }
 const pins = new Map();
 
+// Project currently shown in the panel (kept in sync via RELOAD_PINS messages)
+let panelProjectId = null;
+
 function cleanSelector(sel) {
-  // Strip any pinpoint highlight classes that may have been captured during recording
   return sel.replace(/\.pp-selected|\.pp-hovered/g, '');
 }
 
@@ -27,10 +32,7 @@ function renderPin(bug, seqNumber) {
   const selector = cleanSelector(bug.selector);
 
   let targetEl;
-  try { targetEl = document.querySelector(selector); } catch (err) {
-    console.log('[Pinpoint] querySelector threw for selector:', selector, err);
-  }
-  console.log('[Pinpoint] renderPin bug', bug.id, 'selector:', selector, '→ element:', targetEl);
+  try { targetEl = document.querySelector(selector); } catch {}
   if (!targetEl) return;
 
   pins.get(bug.id)?.pinEl.remove();
@@ -66,24 +68,23 @@ function repositionPins() {
       continue;
     }
     pinEl.style.display = '';
-    // rect coords are viewport-relative; pin layer is position:fixed so use them directly
     pinEl.style.left = `${rect.right}px`;
     pinEl.style.top = `${rect.top}px`;
   }
 }
 
-async function loadPins() {
+async function loadPins(projectId) {
   panelOpen = true;
   pinLayer.style.display = '';
   pinLayer.innerHTML = '';
   pins.clear();
 
   try {
-    const res = await fetch(`${SERVER}/api/bugs?status=open,review`);
-    console.log('[Pinpoint] loadPins fetch status:', res.status);
+    const params = new URLSearchParams({ status: 'open,review' });
+    if (projectId) params.set('projectId', projectId);
+    const res = await fetch(`${SERVER}/api/bugs?${params}`);
     if (!res.ok) return;
     const bugs = await res.json();
-    console.log('[Pinpoint] bugs from server:', bugs.length, bugs);
     if (!Array.isArray(bugs)) return;
 
     const pageUrl = window.location.href;
@@ -97,13 +98,9 @@ async function loadPins() {
       }
     });
 
-    console.log('[Pinpoint] relevant for this page:', relevant.length, 'page:', pageUrl);
     relevant.forEach((bug, i) => renderPin(bug, i + 1));
-    console.log('[Pinpoint] pins in map:', pins.size);
     repositionPins();
-  } catch (err) {
-    console.log('[Pinpoint] loadPins error:', err);
-  }
+  } catch {}
 }
 
 // ── Hover highlight (triggered by panel hovering an issue card) ────────────
@@ -114,11 +111,8 @@ function setHighlight(selector) {
   const clean = cleanSelector(selector);
   try {
     highlightedEl = document.querySelector(clean);
-    console.log('[Pinpoint] setHighlight selector:', clean, '→', highlightedEl);
     if (highlightedEl) highlightedEl.classList.add('pp-highlighted');
-  } catch (err) {
-    console.log('[Pinpoint] setHighlight error:', err);
-  }
+  } catch {}
 }
 
 function clearHighlight() {
@@ -145,9 +139,6 @@ window.addEventListener('resize', scheduleReposition, { passive: true });
 let overlay = null;
 let hoveredEl = null;
 
-// Returns the topmost page element at (x, y), skipping our own overlay and pins.
-// elementsFromPoint is more reliable than the pointerEvents toggle trick inside
-// an event handler, where Chrome may not flush style changes synchronously.
 function topPageElement(x, y) {
   const els = document.elementsFromPoint(x, y);
   return els.find(el => el !== overlay && el !== pinLayer && !pinLayer.contains(el)) || null;
@@ -160,7 +151,6 @@ function isUnique(sel) {
 
 function minimalSegment(el) {
   const tag = el.tagName.toLowerCase();
-  // Prefer stable data attributes over positional selectors
   for (const attr of ['data-component', 'data-testid', 'data-cy', 'data-id', 'data-qa']) {
     if (el.hasAttribute(attr)) {
       const val = el.getAttribute(attr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -197,7 +187,6 @@ function buildShortestPath(el) {
 function getCssSelector(el) {
   if (!el || el === document.body) return 'body';
 
-  // Tier 1: stable data attributes (most robust across deploys)
   for (const attr of ['data-component', 'data-testid', 'data-cy', 'data-id', 'data-qa']) {
     if (el.hasAttribute(attr)) {
       const val = el.getAttribute(attr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -206,20 +195,17 @@ function getCssSelector(el) {
     }
   }
 
-  // Tier 2: id
   if (el.id) {
     const cand = `#${CSS.escape(el.id)}`;
     if (isUnique(cand)) return cand;
   }
 
-  // Tier 3: aria-label
   if (el.hasAttribute('aria-label')) {
     const val = el.getAttribute('aria-label').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const cand = `${el.tagName.toLowerCase()}[aria-label="${val}"]`;
     if (isUnique(cand)) return cand;
   }
 
-  // Tier 4: shortest-unique ancestor walk
   return buildShortestPath(el);
 }
 
@@ -238,15 +224,9 @@ function anchorToComponent(el, sel) {
 
 function getSelector(el) {
   const sel = getCssSelector(el);
-  try {
-    if (document.querySelector(sel) !== el) {
-      console.log('[Pinpoint] selector validation mismatch:', sel);
-    }
-  } catch {}
   return anchorToComponent(el, sel);
 }
 
-// Returns the nearest ancestor's component label, if any
 function getComponentContext(el) {
   let cur = el.parentElement;
   while (cur && cur !== document.documentElement) {
@@ -258,7 +238,6 @@ function getComponentContext(el) {
   return null;
 }
 
-// Returns all data-component ancestor values, outermost first
 function getComponentPath(el) {
   const path = [];
   let cur = el.parentElement;
@@ -278,7 +257,7 @@ function readConsoleErrors() {
     };
     window.addEventListener('pp-errors-data', handler);
     window.dispatchEvent(new CustomEvent('pp-read-errors'));
-    // Fallback in case console-capture.js didn't load (e.g. extension update race)
+    // Fallback if console-capture.js didn't load
     setTimeout(() => {
       window.removeEventListener('pp-errors-data', handler);
       resolve([]);
@@ -307,8 +286,6 @@ function startPicking() {
     const el = topPageElement(e.clientX, e.clientY);
     if (!el) return;
 
-    if (hoveredEl) hoveredEl.classList.remove('pp-hovered');
-
     // Capture everything synchronously before any await so DOM state is stable
     const elementHtml = el.outerHTML.slice(0, 2000);
     const selector = getSelector(el);
@@ -324,8 +301,12 @@ function startPicking() {
     };
     el.classList.add('pp-selected');
 
+    // Remove the overlay immediately so the user sees instant feedback;
+    // console errors are read asynchronously after the UI clears.
+    stopPicking(false);
+
     const rawErrors = await readConsoleErrors();
-    const consoleErrors = rawErrors.filter(e => pickTime - e.ts <= 10000);
+    const consoleErrors = rawErrors.filter(err => pickTime - err.ts <= 10000);
 
     chrome.runtime.sendMessage({
       type: 'ELEMENT_SELECTED',
@@ -342,19 +323,17 @@ function startPicking() {
         componentPath,
       },
     });
-
-    stopPicking(false); // stop overlay but leave selection highlight
   });
 }
 
-function stopPicking(clearHighlight = true) {
+function stopPicking(removeSelection = true) {
   overlay?.remove();
   overlay = null;
   if (hoveredEl) {
     hoveredEl.classList.remove('pp-hovered');
     hoveredEl = null;
   }
-  if (clearHighlight) {
+  if (removeSelection) {
     document.querySelectorAll('.pp-selected').forEach(el => el.classList.remove('pp-selected'));
   }
 }
@@ -379,7 +358,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       respond({ ok: true });
       break;
     case 'RELOAD_PINS':
-      loadPins().then(() => respond({ ok: true }));
+      panelProjectId = msg.projectId ?? null;
+      loadPins(panelProjectId).then(() => respond({ ok: true }));
       return true; // async
     case 'HIDE_PINS':
       panelOpen = false;
@@ -404,18 +384,15 @@ function escHtml(s) {
 
 let panelOpen = false;
 
-// At document_start, body may not exist yet — defer body-dependent init
 function initBody() {
-  // Move pin layer into body (was on documentElement at document_start)
   if (pinLayer.parentElement !== document.body) {
     document.body.appendChild(pinLayer);
   }
-  // Re-load pins on SPA navigation only while panel is open
   let lastUrl = location.href;
   new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      if (panelOpen) loadPins();
+      if (panelOpen) loadPins(panelProjectId);
     }
   }).observe(document.body, { childList: true, subtree: true });
 }
